@@ -1,526 +1,60 @@
+import 'dart:async';
 import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 void main() => runApp(const HabitFlowApp());
 
-const ink = Color(0xFF101827);
-const panel = Color(0xFF192438);
-const lime = Color(0xFFC7F36B);
-const mint = Color(0xFF71E0C2);
-const muted = Color(0xFF8D9AB0);
+const ink = Color(0xFF101827), panel = Color(0xFF192438), lime = Color(0xFFC7F36B), mint = Color(0xFF71E0C2), muted = Color(0xFF8D9AB0);
+String keyDate(DateTime d) => '${d.year.toString().padLeft(4,'0')}-${d.month.toString().padLeft(2,'0')}-${d.day.toString().padLeft(2,'0')}';
+DateTime mondayOf(DateTime d) => DateTime(d.year,d.month,d.day).subtract(Duration(days:d.weekday-1));
+String monthName(int m) => const ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'][m-1];
 
 class HabitFlowApp extends StatelessWidget {
   const HabitFlowApp({super.key});
-
-  @override
-  Widget build(BuildContext context) => MaterialApp(
-        title: 'HabitFlow',
-        debugShowCheckedModeBanner: false,
-        theme: ThemeData(
-          useMaterial3: true,
-          brightness: Brightness.dark,
-          scaffoldBackgroundColor: ink,
-          colorScheme: ColorScheme.fromSeed(
-            seedColor: lime,
-            brightness: Brightness.dark,
-            surface: panel,
-          ),
-          fontFamily: 'Roboto',
-        ),
-        home: const HabitDashboard(),
-      );
+  @override Widget build(BuildContext context) => MaterialApp(title:'HabitFlow',debugShowCheckedModeBanner:false,theme:ThemeData(useMaterial3:true,brightness:Brightness.dark,scaffoldBackgroundColor:ink,colorScheme:ColorScheme.fromSeed(seedColor:lime,brightness:Brightness.dark),fontFamily:'Roboto'),home:const HabitHome());
 }
 
-class HabitItem {
-  HabitItem({
-    required this.id,
-    required this.title,
-    required this.category,
-    required this.icon,
-    required this.description,
-    required this.targetDays,
-    this.done = const {},
-  });
-
-  final String id;
-  final String title;
-  final String category;
-  final IconData icon;
-  final String description;
-  final List<int> targetDays; // DateTime weekday: Monday = 1
-  Map<String, bool> done;
-
-  Map<String, dynamic> toJson() => {
-        'id': id,
-        'title': title,
-        'category': category,
-        'icon': icon.codePoint,
-        'description': description,
-        'targetDays': targetDays,
-        'done': done,
-      };
-
-  factory HabitItem.fromJson(Map<String, dynamic> json) => HabitItem(
-        id: json['id'] as String,
-        title: json['title'] as String,
-        category: json['category'] as String? ?? 'Daily',
-        icon: IconData(
-          json['icon'] as int? ?? Icons.check_circle_outline.codePoint,
-          fontFamily: 'MaterialIcons',
-        ),
-        description: json['description'] as String? ?? '',
-        targetDays: (json['targetDays'] as List<dynamic>? ?? [1, 2, 3, 4, 5, 6, 7])
-            .map((e) => (e as num).toInt())
-            .toList(),
-        done: Map<String, bool>.from(json['done'] as Map? ?? {}),
-      );
+class Habit {
+  Habit({required this.id,required this.title,required this.category,required this.note,required this.days,this.done=const {}});
+  String id,title,category,note; List<int> days; Map<String,bool> done;
+  Map<String,dynamic> toJson()=>{'id':id,'title':title,'category':category,'note':note,'days':days,'done':done};
+  factory Habit.fromJson(Map<String,dynamic> j)=>Habit(id:j['id'],title:j['title'],category:j['category']??'Daily',note:j['note']??'',days:List<int>.from(j['days']??[1,2,3,4,5,6,7]),done:Map<String,bool>.from(j['done']??{}));
 }
+List<Habit> starterHabits()=>[
+ Habit(id:'walk',title:'Brisk walk',category:'Fitness',note:'20–30 minutes at a comfortable pace',days:[1,2,3,4,5,6,7]),
+ Habit(id:'strength',title:'Strength workout',category:'Fitness',note:'Beginner bodyweight routine',days:[1,3,5]),
+ Habit(id:'mobility',title:'Stretch & mobility',category:'Fitness',note:'5–10 minutes, pain-free range',days:[1,2,3,4,5,6,7]),
+ Habit(id:'breaks',title:'Movement breaks',category:'Daily',note:'Stand or walk every 30–60 minutes',days:[1,2,3,4,5,6,7]),
+ Habit(id:'water',title:'Drink water regularly',category:'Health',note:'Spread water intake across the day',days:[1,2,3,4,5,6,7]),
+ Habit(id:'meals',title:'Balanced meals',category:'Nutrition',note:'Protein, vegetables/fruit and usual staples',days:[1,2,3,4,5,6,7]),
+ Habit(id:'sugar',title:'Skip sugary drinks',category:'Nutrition',note:'Choose water most of the time',days:[1,2,3,4,5,6,7]),
+ Habit(id:'sleep',title:'Sleep routine',category:'Recovery',note:'Keep a steady schedule; aim for 7–9 hours',days:[1,2,3,4,5,6,7]),
+];
 
-String dateKey(DateTime date) =>
-    '${date.year.toString().padLeft(4, '0')}-${date.month.toString().padLeft(2, '0')}-${date.day.toString().padLeft(2, '0')}';
-
-DateTime startOfWeek(DateTime date) =>
-    DateTime(date.year, date.month, date.day).subtract(Duration(days: date.weekday - 1));
-
-String shortDate(DateTime date) => '${date.day}/${date.month}';
-
-List<HabitItem> defaultHabits() => [
-      HabitItem(id: 'walk', title: 'Brisk walk', category: 'Movement', icon: Icons.directions_walk_rounded, description: '20–30 min; start gently', targetDays: [1, 2, 3, 4, 5, 6, 7]),
-      HabitItem(id: 'strength', title: 'Strength workout', category: 'Workout', icon: Icons.fitness_center_rounded, description: 'Beginner bodyweight routine', targetDays: [1, 3, 5]),
-      HabitItem(id: 'mobility', title: 'Stretch & mobility', category: 'Movement', icon: Icons.self_improvement_rounded, description: '5–10 min, pain-free range', targetDays: [1, 2, 3, 4, 5, 6, 7]),
-      HabitItem(id: 'breaks', title: 'Movement breaks', category: 'Daily', icon: Icons.timer_outlined, description: 'Stand or walk every 30–60 min', targetDays: [1, 2, 3, 4, 5, 6, 7]),
-      HabitItem(id: 'water', title: 'Drink water regularly', category: 'Nutrition', icon: Icons.water_drop_outlined, description: 'Drink across the day; do not force excess', targetDays: [1, 2, 3, 4, 5, 6, 7]),
-      HabitItem(id: 'protein', title: 'Balanced meals', category: 'Nutrition', icon: Icons.restaurant_outlined, description: 'Protein + vegetables/fruit + usual staple', targetDays: [1, 2, 3, 4, 5, 6, 7]),
-      HabitItem(id: 'sugary', title: 'Skip sugary drinks', category: 'Nutrition', icon: Icons.no_drinks_outlined, description: 'Choose water most of the time', targetDays: [1, 2, 3, 4, 5, 6, 7]),
-      HabitItem(id: 'sleep', title: 'Sleep routine', category: 'Recovery', icon: Icons.bedtime_outlined, description: 'Aim for 7–9 hours; keep a steady schedule', targetDays: [1, 2, 3, 4, 5, 6, 7]),
-    ];
-
-class HabitDashboard extends StatefulWidget {
-  const HabitDashboard({super.key});
-  @override
-  State<HabitDashboard> createState() => _HabitDashboardState();
-}
-
-class _HabitDashboardState extends State<HabitDashboard> {
-  List<HabitItem> habits = [];
-  bool loading = true;
-  int tab = 0;
-  DateTime selectedDate = DateTime.now();
-  final List<String> weekdays = const ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
-
-  @override
-  void initState() {
-    super.initState();
-    _load();
-  }
-
-  Future<void> _load() async {
-    final prefs = await SharedPreferences.getInstance();
-    final raw = prefs.getString('habitflow_data_v1');
-    if (raw != null) {
-      try {
-        habits = (jsonDecode(raw) as List<dynamic>)
-            .map((item) => HabitItem.fromJson(Map<String, dynamic>.from(item as Map))
-            ).toList();
-      } catch (_) {
-        habits = defaultHabits();
-      }
-    } else {
-      habits = defaultHabits();
-    }
-    if (mounted) setState(() => loading = false);
-    await _save();
-  }
-
-  Future<void> _save() async {
-    final prefs = await SharedPreferences.getInstance();
-    await prefs.setString('habitflow_data_v1', jsonEncode(habits.map((h) => h.toJson()).toList()));
-  }
-
-  bool _isScheduled(HabitItem habit, DateTime date) => habit.targetDays.contains(date.weekday);
-  bool _isDone(HabitItem habit, DateTime date) => habit.done[dateKey(date)] ?? false;
-
-  void _toggle(HabitItem habit, DateTime date, bool value) {
-    setState(() => habit.done[dateKey(date)] = value);
-    _save();
-  }
-
-  double _weeklyRate(HabitItem habit) {
-    final monday = startOfWeek(DateTime.now());
-    final due = List.generate(7, (i) => monday.add(Duration(days: i)))
-        .where((day) => _isScheduled(habit, day))
-        .toList();
-    if (due.isEmpty) return 0;
-    final completed = due.where((day) => _isDone(habit, day)).length;
-    return completed / due.length;
-  }
-
-  int get _todayDone => habits.where((h) => _isScheduled(h, selectedDate) && _isDone(h, selectedDate)).length;
-  int get _todayDue => habits.where((h) => _isScheduled(h, selectedDate)).length;
-  double get _todayRate => _todayDue == 0 ? 0 : _todayDone / _todayDue;
-
-  @override
-  Widget build(BuildContext context) {
-    if (loading) return const Scaffold(body: Center(child: CircularProgressIndicator(color: lime)));
-    return Scaffold(
-      body: Container(
-        decoration: const BoxDecoration(
-          gradient: LinearGradient(begin: Alignment.topLeft, end: Alignment.bottomRight, colors: [Color(0xFF1D2B3D), ink, Color(0xFF101D28)]),
-        ),
-        child: SafeArea(
-          child: IndexedStack(
-            index: tab,
-            children: [_dashboard(), _weeklyPlan(), _guide()],
-          ),
-        ),
-      ),
-      bottomNavigationBar: NavigationBar(
-        backgroundColor: const Color(0xFF141F2E),
-        indicatorColor: lime.withOpacity(.16),
-        selectedIndex: tab,
-        onDestinationSelected: (value) => setState(() => tab = value),
-        destinations: const [
-          NavigationDestination(icon: Icon(Icons.grid_view_rounded), selectedIcon: Icon(Icons.grid_view_rounded, color: lime), label: 'Today'),
-          NavigationDestination(icon: Icon(Icons.calendar_month_rounded), selectedIcon: Icon(Icons.calendar_month_rounded, color: lime), label: 'This week'),
-          NavigationDestination(icon: Icon(Icons.menu_book_rounded), selectedIcon: Icon(Icons.menu_book_rounded, color: lime), label: 'Guide'),
-        ],
-      ),
-    );
-  }
-
-  Widget _dashboard() {
-    final due = habits.where((h) => _isScheduled(h, selectedDate)).toList();
-    return CustomScrollView(
-      physics: const BouncingScrollPhysics(),
-      slivers: [
-        SliverToBoxAdapter(
-          child: Padding(
-            padding: const EdgeInsets.fromLTRB(20, 20, 20, 0),
-            child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-              Row(children: [
-                Container(width: 44, height: 44, decoration: BoxDecoration(color: lime, borderRadius: BorderRadius.circular(15)), child: const Icon(Icons.bolt_rounded, color: ink, size: 28)),
-                const SizedBox(width: 12),
-                const Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                  Text('HABITFLOW', style: TextStyle(color: lime, letterSpacing: 2.5, fontSize: 11, fontWeight: FontWeight.w800)),
-                  Text('Small steps. Real progress.', style: TextStyle(fontSize: 17, fontWeight: FontWeight.w700)),
-                ])),
-                IconButton(onPressed: _addHabit, icon: const Icon(Icons.add_circle_outline_rounded, color: lime, size: 29), tooltip: 'Add habit'),
-              ]),
-              const SizedBox(height: 24),
-              Text(_greeting(), style: const TextStyle(fontSize: 27, fontWeight: FontWeight.w800, letterSpacing: -.5)),
-              const SizedBox(height: 5),
-              Text('${_monthName(selectedDate.month)} ${selectedDate.day} • Your daily reset', style: const TextStyle(color: muted)),
-              const SizedBox(height: 19),
-              _heroCard(),
-              const SizedBox(height: 20),
-              _dateStrip(),
-              const SizedBox(height: 24),
-              Row(mainAxisAlignment: MainAxisAlignment.spaceBetween, children: [
-                const Text('Today’s habits', style: TextStyle(fontSize: 20, fontWeight: FontWeight.w800)),
-                Text('${due.where((h) => _isDone(h, selectedDate)).length}/${due.length} done', style: const TextStyle(color: lime, fontWeight: FontWeight.w700)),
-              ]),
-              const SizedBox(height: 5),
-              const Text('Tap a circle to mark a task complete.', style: TextStyle(color: muted, fontSize: 12)),
-              const SizedBox(height: 12),
-            ]),
-          ),
-        ),
-        if (due.isEmpty)
-          const SliverToBoxAdapter(child: Padding(padding: EdgeInsets.all(28), child: Text('No scheduled tasks for this day.', textAlign: TextAlign.center, style: TextStyle(color: muted))))
-        else
-          SliverPadding(
-            padding: const EdgeInsets.fromLTRB(20, 0, 20, 18),
-            sliver: SliverList(delegate: SliverChildBuilderDelegate(
-              (context, index) => _habitCard(due[index]),
-              childCount: due.length,
-            )),
-          ),
-        SliverToBoxAdapter(child: Padding(padding: const EdgeInsets.fromLTRB(20, 0, 20, 24), child: _bottomTip())),
-      ],
-    );
-  }
-
-  Widget _heroCard() {
-    return Container(
-      width: double.infinity,
-      padding: const EdgeInsets.all(20),
-      decoration: BoxDecoration(
-        borderRadius: BorderRadius.circular(27),
-        gradient: const LinearGradient(begin: Alignment.topLeft, end: Alignment.bottomRight, colors: [Color(0xFFBFEF66), Color(0xFF8BDCB8)]),
-        boxShadow: [BoxShadow(color: lime.withOpacity(.12), blurRadius: 28, offset: const Offset(0, 12))],
-      ),
-      child: Row(children: [
-        Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-          const Text('DAILY SCORE', style: TextStyle(color: Color(0xFF34442A), fontSize: 11, letterSpacing: 1.8, fontWeight: FontWeight.w900)),
-          const SizedBox(height: 7),
-          Text('${(_todayRate * 100).round()}%', style: const TextStyle(color: ink, fontSize: 43, fontWeight: FontWeight.w900, height: 1)),
-          const SizedBox(height: 9),
-          Text('$_todayDone of $_todayDue tasks completed', style: const TextStyle(color: Color(0xFF34442A), fontWeight: FontWeight.w600)),
-          const SizedBox(height: 13),
-          Container(padding: const EdgeInsets.symmetric(horizontal: 11, vertical: 7), decoration: BoxDecoration(color: Colors.white.withOpacity(.45), borderRadius: BorderRadius.circular(20)), child: Text(_todayRate == 1 && _todayDue > 0 ? 'All done — nice work!' : 'Keep your pace steady', style: const TextStyle(color: ink, fontSize: 11, fontWeight: FontWeight.w800))),
-        ])),
-        SizedBox(
-          width: 105,
-          height: 105,
-          child: Stack(alignment: Alignment.center, children: [
-            SizedBox(width: 100, height: 100, child: CircularProgressIndicator(value: _todayRate, strokeWidth: 9, backgroundColor: ink.withOpacity(.1), valueColor: const AlwaysStoppedAnimation<Color>(ink), strokeCap: StrokeCap.round)),
-            const Icon(Icons.bolt_rounded, size: 40, color: ink),
-          ]),
-        ),
-      ]),
-    );
-  }
-
-  Widget _dateStrip() {
-    final monday = startOfWeek(DateTime.now());
-    return Row(children: List.generate(7, (index) {
-      final day = monday.add(Duration(days: index));
-      final selected = dateKey(selectedDate) == dateKey(day);
-      final dueCount = habits.where((h) => _isScheduled(h, day)).length;
-      final doneCount = habits.where((h) => _isScheduled(h, day) && _isDone(h, day)).length;
-      return Expanded(child: Padding(padding: EdgeInsets.only(right: index == 6 ? 0 : 7), child: InkWell(
-        borderRadius: BorderRadius.circular(16),
-        onTap: () => setState(() => selectedDate = day),
-        child: AnimatedContainer(
-          duration: const Duration(milliseconds: 180),
-          padding: const EdgeInsets.symmetric(vertical: 11),
-          decoration: BoxDecoration(color: selected ? lime : panel.withOpacity(.9), borderRadius: BorderRadius.circular(16), border: Border.all(color: selected ? lime : Colors.white.withOpacity(.06))),
-          child: Column(children: [
-            Text(weekdays[index], style: TextStyle(fontSize: 10, fontWeight: FontWeight.w700, color: selected ? ink : muted)),
-            const SizedBox(height: 8),
-            Text('${day.day}', style: TextStyle(fontSize: 16, fontWeight: FontWeight.w800, color: selected ? ink : Colors.white)),
-            const SizedBox(height: 7),
-            Container(width: 5, height: 5, decoration: BoxDecoration(shape: BoxShape.circle, color: dueCount > 0 && doneCount == dueCount ? (selected ? ink : lime) : (selected ? ink.withOpacity(.22) : Colors.white24))),
-          ]),
-        ),
-      )));
-    }));
-  }
-
-  Widget _habitCard(HabitItem habit) {
-    final complete = _isDone(habit, selectedDate);
-    final rate = _weeklyRate(habit);
-    final monday = startOfWeek(DateTime.now());
-    final dueCount = habit.targetDays.length;
-    final doneCount = List.generate(7, (i) => monday.add(Duration(days: i)))
-        .where((date) => _isScheduled(habit, date) && _isDone(habit, date)).length;
-    return Container(
-      margin: const EdgeInsets.only(bottom: 12),
-      padding: const EdgeInsets.all(15),
-      decoration: BoxDecoration(color: panel.withOpacity(.91), borderRadius: BorderRadius.circular(22), border: Border.all(color: complete ? lime.withOpacity(.36) : Colors.white.withOpacity(.06))),
-      child: Column(children: [
-        Row(children: [
-          Container(width: 47, height: 47, decoration: BoxDecoration(color: (complete ? lime : mint).withOpacity(.13), borderRadius: BorderRadius.circular(15)), child: Icon(habit.icon, color: complete ? lime : mint, size: 24)),
-          const SizedBox(width: 12),
-          Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-            Text(habit.title, style: TextStyle(fontWeight: FontWeight.w800, fontSize: 15, decoration: complete ? TextDecoration.lineThrough : null, color: complete ? muted : Colors.white)),
-            const SizedBox(height: 4),
-            Text(habit.description, style: const TextStyle(color: muted, fontSize: 11)),
-          ])),
-          const SizedBox(width: 8),
-          InkWell(onTap: () => _toggle(habit, selectedDate, !complete), borderRadius: BorderRadius.circular(50), child: AnimatedContainer(duration: const Duration(milliseconds: 160), width: 34, height: 34, decoration: BoxDecoration(shape: BoxShape.circle, color: complete ? lime : Colors.transparent, border: Border.all(color: complete ? lime : muted, width: 1.5)), child: complete ? const Icon(Icons.check_rounded, color: ink, size: 22) : null)),
-        ]),
-        const SizedBox(height: 15),
-        Row(children: [
-          const Text('WEEKLY PROGRESS', style: TextStyle(fontSize: 9, fontWeight: FontWeight.w900, letterSpacing: 1.3, color: muted)),
-          const Spacer(),
-          Text('$doneCount/$dueCount days', style: const TextStyle(color: lime, fontSize: 11, fontWeight: FontWeight.w800)),
-          const SizedBox(width: 7),
-          Text('${(rate * 100).round()}%', style: const TextStyle(color: Colors.white70, fontSize: 11, fontWeight: FontWeight.w700)),
-        ]),
-        const SizedBox(height: 8),
-        ClipRRect(borderRadius: BorderRadius.circular(20), child: LinearProgressIndicator(value: rate, minHeight: 6, backgroundColor: Colors.white.withOpacity(.07), valueColor: const AlwaysStoppedAnimation<Color>(lime))),
-        const SizedBox(height: 10),
-        Row(children: List.generate(7, (i) {
-          final day = monday.add(Duration(days: i));
-          final scheduled = _isScheduled(habit, day);
-          final done = _isDone(habit, day);
-          return Expanded(child: Center(child: Container(
-            width: 24,
-            height: 24,
-            decoration: BoxDecoration(shape: BoxShape.circle, color: done ? lime : scheduled ? Colors.white.withOpacity(.06) : Colors.transparent, border: Border.all(color: done ? lime : scheduled ? Colors.white12 : Colors.transparent)),
-            child: Center(child: Text(weekdays[i][0], style: TextStyle(fontSize: 9, fontWeight: FontWeight.w800, color: done ? ink : scheduled ? muted : Colors.white12))),
-          )));
-        })),
-      ]),
-    );
-  }
-
-  Widget _bottomTip() => Container(
-        padding: const EdgeInsets.all(16),
-        decoration: BoxDecoration(color: const Color(0xFF202D38), borderRadius: BorderRadius.circular(20)),
-        child: const Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
-          Icon(Icons.lightbulb_outline_rounded, color: lime),
-          SizedBox(width: 11),
-          Expanded(child: Text('Consistency beats intensity. Start with a comfortable pace and build gradually. You do not need a crash diet or extreme workouts.', style: TextStyle(color: Colors.white70, height: 1.45, fontSize: 12))),
-        ]),
-      );
-
-  Widget _weeklyPlan() {
-    final monday = startOfWeek(DateTime.now());
-    const plan = [
-      ('Monday', 'Walk + strength', '20–30 min walk • 2 sets each: chair squats, wall push-ups, glute bridges, plank'),
-      ('Tuesday', 'Walk + mobility', '20–30 min walk • 5–10 min gentle stretching'),
-      ('Wednesday', 'Strength day', '20–30 min walk • repeat the beginner strength routine'),
-      ('Thursday', 'Active recovery', 'Easy walk • gentle mobility; no hard workout required'),
-      ('Friday', 'Strength day', '20–30 min walk • strength routine if recovered'),
-      ('Saturday', 'Enjoyable movement', 'Walk, cycle, or play a sport at a comfortable pace'),
-      ('Sunday', 'Recovery & review', 'Easy movement or rest • review your weekly progress'),
-    ];
-    return ListView(
-      padding: const EdgeInsets.fromLTRB(20, 20, 20, 24),
-      children: [
-        const Text('YOUR WEEK', style: TextStyle(color: lime, fontSize: 11, fontWeight: FontWeight.w900, letterSpacing: 2)),
-        const SizedBox(height: 7),
-        const Text('A balanced movement plan', style: TextStyle(fontSize: 26, fontWeight: FontWeight.w900)),
-        const SizedBox(height: 8),
-        const Text('Start gently. Rest if sore, and do not exercise through pain.', style: TextStyle(color: muted, height: 1.4)),
-        const SizedBox(height: 20),
-        ...List.generate(7, (i) {
-          final day = monday.add(Duration(days: i));
-          final entry = plan[i];
-          final todaysHabits = habits.where((h) => _isScheduled(h, day)).toList();
-          final completed = todaysHabits.where((h) => _isDone(h, day)).length;
-          final rate = todaysHabits.isEmpty ? 0.0 : completed / todaysHabits.length;
-          return Container(
-            margin: const EdgeInsets.only(bottom: 12),
-            padding: const EdgeInsets.all(16),
-            decoration: BoxDecoration(color: panel, borderRadius: BorderRadius.circular(21), border: Border.all(color: dateKey(day) == dateKey(DateTime.now()) ? lime.withOpacity(.5) : Colors.white.withOpacity(.06))),
-            child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-              Row(children: [
-                Container(width: 43, height: 43, decoration: BoxDecoration(color: lime.withOpacity(.12), borderRadius: BorderRadius.circular(14)), child: Center(child: Text('${day.day}', style: const TextStyle(color: lime, fontWeight: FontWeight.w900, fontSize: 17)))),
-                const SizedBox(width: 12),
-                Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                  Text(entry.$1, style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w800)),
-                  Text(entry.$2, style: const TextStyle(color: lime, fontSize: 12, fontWeight: FontWeight.w700)),
-                ])),
-                Text('$completed/${todaysHabits.length}', style: const TextStyle(color: muted, fontSize: 12)),
-              ]),
-              const SizedBox(height: 12),
-              Text(entry.$3, style: const TextStyle(color: Colors.white70, fontSize: 12, height: 1.5)),
-              const SizedBox(height: 12),
-              ClipRRect(borderRadius: BorderRadius.circular(10), child: LinearProgressIndicator(value: rate, minHeight: 5, backgroundColor: Colors.white10, valueColor: const AlwaysStoppedAnimation<Color>(lime))),
-            ]),
-          );
-        }),
-        _sectionNote(Icons.fitness_center_rounded, 'Beginner strength circuit', 'Chair/bodyweight squat: 2 × 8–10 • Wall push-up: 2 × 8–10 • Glute bridge: 2 × 10 • Plank: 2 × 10–20 seconds. Rest between sets; stop for sharp pain, dizziness or unusual shortness of breath.'),
-        const SizedBox(height: 10),
-        _sectionNote(Icons.trending_up_rounded, 'Progress gradually', 'Start at a level that feels comfortable. Add a few minutes of walking or a repetition only when the current routine feels easy. The long-term adult target is 150 minutes of moderate activity per week plus strength training at least twice weekly.'),
-      ],
-    );
-  }
-
-  Widget _guide() => ListView(
-        padding: const EdgeInsets.fromLTRB(20, 20, 20, 28),
-        children: [
-          const Text('THE PLAYBOOK', style: TextStyle(color: lime, fontSize: 11, fontWeight: FontWeight.w900, letterSpacing: 2)),
-          const SizedBox(height: 7),
-          const Text('Habits that help', style: TextStyle(fontSize: 27, fontWeight: FontWeight.w900)),
-          const SizedBox(height: 8),
-          const Text('Your BMI is in the usual adult healthy range. Focus on fitness, strength and consistency—not rapid weight loss.', style: TextStyle(color: muted, height: 1.5)),
-          const SizedBox(height: 20),
-          _guideCard(Icons.check_circle_outline_rounded, lime, 'DO MORE OF', [
-            'Walk most days and break up long sitting periods.',
-            'Eat regular balanced meals; include protein, vegetables and fruit.',
-            'Drink water regularly and use thirst as a guide.',
-            'Keep a consistent sleep routine; adults usually need 7–9 hours.',
-            'Track waist and energy trends weekly, not several times each day.',
-            'Take rest days and adapt exercise to how you feel.',
-          ]),
-          const SizedBox(height: 13),
-          _guideCard(Icons.block_rounded, const Color(0xFFFF9D88), 'AVOID', [
-            'Crash diets, skipping meals or trying to lose weight rapidly.',
-            'Expecting sit-ups or face exercises to remove fat from one place.',
-            'Sugary drinks as your main source of hydration.',
-            'Pushing through sharp pain, dizziness or unusual breathlessness.',
-            'Comparing your face or body to edited social-media images.',
-          ]),
-          const SizedBox(height: 13),
-          _guideCard(Icons.restaurant_menu_rounded, mint, 'SIMPLE PLATE GUIDE', [
-            'Keep your regular rice/roti portion; no need to ban carbohydrates.',
-            'Include dal, fish, eggs, chicken, tofu or another protein source.',
-            'Add vegetables and fruit most days.',
-            'Reduce frequent sugary drinks and ultra-processed snacks without strict bans.',
-          ]),
-          const SizedBox(height: 13),
-          _guideCard(Icons.health_and_safety_outlined, const Color(0xFFFFCE78), 'SAFETY NOTES', [
-            'Stop and seek medical advice if exercise causes chest pain, faintness or unusual breathlessness.',
-            'Sudden facial swelling, especially with lip/tongue swelling or breathing trouble, needs urgent care.',
-            'Habit tracking is not a diagnosis. If tiredness or unexplained swelling persists, speak to a clinician.',
-          ]),
-          const SizedBox(height: 18),
-          Container(padding: const EdgeInsets.all(16), decoration: BoxDecoration(color: lime.withOpacity(.09), borderRadius: BorderRadius.circular(20), border: Border.all(color: lime.withOpacity(.2))), child: const Text('Your goal: show up consistently, build strength, and feel better. Missing a day is a reset—not a failure.', style: TextStyle(color: Colors.white, fontWeight: FontWeight.w600, height: 1.5))),
-        ],
-      );
-
-  Widget _guideCard(IconData icon, Color color, String title, List<String> lines) => Container(
-        padding: const EdgeInsets.all(17),
-        decoration: BoxDecoration(color: panel, borderRadius: BorderRadius.circular(21), border: Border.all(color: Colors.white.withOpacity(.06))),
-        child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-          Row(children: [Icon(icon, color: color), const SizedBox(width: 9), Text(title, style: TextStyle(color: color, letterSpacing: 1.3, fontSize: 11, fontWeight: FontWeight.w900))]),
-          const SizedBox(height: 12),
-          ...lines.map((line) => Padding(padding: const EdgeInsets.only(bottom: 9), child: Row(crossAxisAlignment: CrossAxisAlignment.start, children: [Icon(Icons.circle, color: color.withOpacity(.8), size: 6), const SizedBox(width: 10), Expanded(child: Text(line, style: const TextStyle(color: Colors.white70, fontSize: 12, height: 1.45)))]))),
-        ]),
-      );
-
-  Widget _sectionNote(IconData icon, String title, String description) => Container(
-        padding: const EdgeInsets.all(16),
-        decoration: BoxDecoration(color: const Color(0xFF202D38), borderRadius: BorderRadius.circular(20)),
-        child: Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
-          Icon(icon, color: lime),
-          const SizedBox(width: 12),
-          Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-            Text(title, style: const TextStyle(fontWeight: FontWeight.w800)),
-            const SizedBox(height: 6),
-            Text(description, style: const TextStyle(color: Colors.white70, height: 1.5, fontSize: 12)),
-          ])),
-        ]),
-      );
-
-  Future<void> _addHabit() async {
-    final title = TextEditingController();
-    final description = TextEditingController();
-    String category = 'Daily';
-    final days = <int>{1, 2, 3, 4, 5, 6, 7};
-    final result = await showModalBottomSheet<bool>(
-      context: context,
-      isScrollControlled: true,
-      backgroundColor: panel,
-      shape: const RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(26))),
-      builder: (context) => StatefulBuilder(builder: (context, setModal) => Padding(
-        padding: EdgeInsets.fromLTRB(20, 22, 20, MediaQuery.of(context).viewInsets.bottom + 24),
-        child: SingleChildScrollView(child: Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.start, children: [
-          const Text('Create a habit', style: TextStyle(fontSize: 22, fontWeight: FontWeight.w900)),
-          const SizedBox(height: 16),
-          TextField(controller: title, autofocus: true, decoration: const InputDecoration(labelText: 'Habit name', border: OutlineInputBorder())),
-          const SizedBox(height: 12),
-          TextField(controller: description, decoration: const InputDecoration(labelText: 'Small action / reminder', border: OutlineInputBorder())),
-          const SizedBox(height: 12),
-          DropdownButtonFormField<String>(value: category, decoration: const InputDecoration(labelText: 'Category', border: OutlineInputBorder()), items: const ['Daily', 'Movement', 'Workout', 'Nutrition', 'Recovery', 'Study'].map((c) => DropdownMenuItem(value: c, child: Text(c))).toList(), onChanged: (value) => setModal(() => category = value ?? 'Daily')),
-          const SizedBox(height: 14),
-          const Text('Repeat on', style: TextStyle(fontWeight: FontWeight.w700)),
-          const SizedBox(height: 8),
-          Wrap(spacing: 6, children: List.generate(7, (i) => FilterChip(label: Text(weekdays[i]), selected: days.contains(i + 1), onSelected: (on) => setModal(() { on ? days.add(i + 1) : days.remove(i + 1); })))),
-          const SizedBox(height: 18),
-          SizedBox(width: double.infinity, child: FilledButton(onPressed: () { if (title.text.trim().isEmpty || days.isEmpty) return; Navigator.pop(context, true); }, child: const Text('Save habit'))),
-        ])),
-      )),
-    );
-    if (result == true && title.text.trim().isNotEmpty && days.isNotEmpty) {
-      setState(() => habits.add(HabitItem(id: DateTime.now().microsecondsSinceEpoch.toString(), title: title.text.trim(), category: category, icon: Icons.flag_outlined, description: description.text.trim().isEmpty ? 'Your custom habit' : description.text.trim(), targetDays: days.toList()..sort())));
-      await _save();
-    }
-    title.dispose();
-    description.dispose();
-  }
-
-  String _greeting() {
-    final hour = DateTime.now().hour;
-    if (hour < 12) return 'Good morning.';
-    if (hour < 17) return 'Good afternoon.';
-    return 'Good evening.';
-  }
-
-  String _monthName(int month) => const ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'][month - 1];
+class HabitHome extends StatefulWidget { const HabitHome({super.key}); @override State<HabitHome> createState()=>_HabitHomeState(); }
+class _HabitHomeState extends State<HabitHome> {
+ List<Habit> habits=[]; bool loading=true; int tab=0,water=0,xp=0,focusMinutes=0; double weight=60.8,waist=30; int sleepHours=8,mood=3,energy=3; String sleepNote=''; final List<Map<String,dynamic>> bodyLog=[]; final Map<String,String> reminders={}; Timer? timer; int secondsLeft=25*60; bool timerRunning=false; final List<String> daysName=['Mon','Tue','Wed','Thu','Fri','Sat','Sun'];
+ @override void initState(){super.initState();load();}
+ @override void dispose(){timer?.cancel();super.dispose();}
+ Future<void> load() async {final p=await SharedPreferences.getInstance();try{final raw=p.getString('habitflow_data_v1');habits=raw==null?starterHabits():(jsonDecode(raw) as List).map((e)=>Habit.fromJson(Map<String,dynamic>.from(e))).toList();water=p.getInt('water')??0;xp=p.getInt('xp')??0;weight=p.getDouble('weight')??60.8;waist=p.getDouble('waist')??30;sleepHours=p.getInt('sleepHours')??8;mood=p.getInt('mood')??3;energy=p.getInt('energy')??3;focusMinutes=p.getInt('focusMinutes')??0;bodyLog=(jsonDecode(p.getString('bodyLog')??'[]') as List).map((e)=>Map<String,dynamic>.from(e)).toList();reminders=Map<String,String>.from(jsonDecode(p.getString('reminders')??'{}'));}catch(_){habits=starterHabits();}if(mounted)setState(()=>loading=false);}
+ Future<void> save() async {final p=await SharedPreferences.getInstance();await p.setString('habitflow_data_v1',jsonEncode(habits.map((h)=>h.toJson()).toList()));await p.setInt('water',water);await p.setInt('xp',xp);await p.setDouble('weight',weight);await p.setDouble('waist',waist);await p.setInt('sleepHours',sleepHours);await p.setInt('mood',mood);await p.setInt('energy',energy);await p.setInt('focusMinutes',focusMinutes);await p.setString('bodyLog',jsonEncode(bodyLog));await p.setString('reminders',jsonEncode(reminders));}
+ bool due(Habit h,DateTime d)=>h.days.contains(d.weekday); bool done(Habit h,DateTime d)=>h.done[keyDate(d)]??false;
+ void toggle(Habit h,DateTime d){setState(()=>h.done[keyDate(d)]=!done(h,d));if(done(h,d))xp+=10;else xp=(xp-10).clamp(0,999999);save();}
+ double rate(Habit h){final m=mondayOf(DateTime.now());final dueDays=List.generate(7,(i)=>m.add(Duration(days:i))).where((d)=>due(h,d)).toList();if(dueDays.isEmpty)return 0;return dueDays.where((d)=>done(h,d)).length/dueDays.length;}
+ int get completedToday=>habits.where((h)=>due(h,DateTime.now())&&done(h,DateTime.now())).length;
+ int get dueToday=>habits.where((h)=>due(h,DateTime.now())).length;
+ @override Widget build(BuildContext context){if(loading)return const Scaffold(body:Center(child:CircularProgressIndicator(color:lime)));return Scaffold(body:Container(decoration:const BoxDecoration(gradient:LinearGradient(begin:Alignment.topLeft,end:Alignment.bottomRight,colors:[Color(0xFF1D2B3D),ink,Color(0xFF101D28)])),child:SafeArea(child:IndexedStack(index:tab,children:[dashboard(),analytics(),workouts(),health(),focusAndGuide()]))),bottomNavigationBar:NavigationBar(backgroundColor:const Color(0xFF141F2E),indicatorColor:lime.withOpacity(.16),selectedIndex:tab,onDestinationSelected:(v)=>setState(()=>tab=v),destinations:const[NavigationDestination(icon:Icon(Icons.grid_view_rounded),label:'Today'),NavigationDestination(icon:Icon(Icons.insights_rounded),label:'Insights'),NavigationDestination(icon:Icon(Icons.fitness_center_rounded),label:'Workout'),NavigationDestination(icon:Icon(Icons.favorite_outline),label:'Health'),NavigationDestination(icon:Icon(Icons.timer_outlined),label:'Focus')]);}
+ Widget header(String eyebrow,String title,String subtitle)=>Padding(padding:const EdgeInsets.fromLTRB(20,22,20,18),child:Column(crossAxisAlignment:CrossAxisAlignment.start,children:[Text(eyebrow,style:const TextStyle(color:lime,fontSize:11,fontWeight:FontWeight.w900,letterSpacing:2)),const SizedBox(height:7),Text(title,style:const TextStyle(fontSize:27,fontWeight:FontWeight.w900)),const SizedBox(height:6),Text(subtitle,style:const TextStyle(color:muted,height:1.4))]));
+ Widget card(Widget child)=>Container(width:double.infinity,margin:const EdgeInsets.only(bottom:12),padding:const EdgeInsets.all(16),decoration:BoxDecoration(color:panel.withOpacity(.94),borderRadius:BorderRadius.circular(21),border:Border.all(color:Colors.white.withOpacity(.06))),child:child);
+ Widget bar(double v)=>ClipRRect(borderRadius:BorderRadius.circular(20),child:LinearProgressIndicator(value:v.clamp(0,1),minHeight:7,backgroundColor:Colors.white10,valueColor:const AlwaysStoppedAnimation<Color>(lime)));
+ Widget dashboard(){final m=mondayOf(DateTime.now());final due=habits.where((h)=>due(h,DateTime.now())).toList();final percent=due.isEmpty?0.0:completedToday/dueToday;return ListView(padding:EdgeInsets.zero,children:[header('HABITFLOW • DAILY RESET','Small steps. Real progress.','${monthName(DateTime.now().month)} ${DateTime.now().day} • Level ${xp~/100+1} • $xp XP'),card(Column(crossAxisAlignment:CrossAxisAlignment.start,children:[Row(mainAxisAlignment:MainAxisAlignment.spaceBetween,children:[const Text('TODAY SCORE',style:TextStyle(color:lime,fontWeight:FontWeight.w900,letterSpacing:1.5)),Text('${(percent*100).round()}%',style:const TextStyle(fontSize:32,fontWeight:FontWeight.w900,color:lime))]),const SizedBox(height:9),bar(percent),const SizedBox(height:8),Text('$completedToday of $dueToday tasks complete',style:const TextStyle(color:muted)),const SizedBox(height:14),Row(children:[const Icon(Icons.local_fire_department,color:Color(0xFFFFAD73)),const SizedBox(width:7),Text('Level ${xp~/100+1} • ${100-xp%100} XP to next level',style:const TextStyle(fontWeight:FontWeight.w700))])])),Padding(padding:const EdgeInsets.fromLTRB(20,10,20,10),child:Row(mainAxisAlignment:MainAxisAlignment.spaceBetween,children:[const Text('Your habits',style:TextStyle(fontSize:20,fontWeight:FontWeight.w900)),TextButton(onPressed:addHabit,child:const Text('+ Add habit'))])),...due.map((h)=>Padding(padding:const EdgeInsets.symmetric(horizontal:20),child:card(Column(children:[Row(children:[Expanded(child:Column(crossAxisAlignment:CrossAxisAlignment.start,children:[Text(h.title,style:const TextStyle(fontWeight:FontWeight.w800,fontSize:15)),const SizedBox(height:4),Text(h.note,style:const TextStyle(color:muted,fontSize:11))])),Checkbox(value:done(h,DateTime.now()),activeColor:lime,checkColor:ink,onChanged:(_)=>toggle(h,DateTime.now()))]),const SizedBox(height:8),Row(children:[const Text('WEEKLY PROGRESS',style:TextStyle(color:muted,fontSize:9,letterSpacing:1.2)),const Spacer(),Text('${(rate(h)*100).round()}%',style:const TextStyle(color:lime,fontWeight:FontWeight.w800))]),const SizedBox(height:7),bar(rate(h))])))),card(Column(crossAxisAlignment:CrossAxisAlignment.start,children:[const Text('QUICK CHECK-IN',style:TextStyle(color:lime,fontWeight:FontWeight.w900)),const SizedBox(height:12),Text('Water today: $water ml'),Slider(value:water.toDouble().clamp(0,4000),min:0,max:4000,divisions:40,onChanged:(v)=>setState(()=>water=v.round()),onChangeEnd:(_)=>save()),Text('Mood: ${['','Low','Okay','Good','Great'][mood]}  •  Energy: ${['','Low','Okay','Good','High'][energy]}'),const SizedBox(height:8),Wrap(spacing:8,children:[OutlinedButton(onPressed:()=>setState(()=>mood=mood%4+1),child:const Text('Change mood')),OutlinedButton(onPressed:()=>setState(()=>energy=energy%4+1),child:const Text('Change energy'))]),FilledButton(onPressed:save,child:const Text('Save check-in'))])),const SizedBox(height:20)]);}
+ Widget analytics(){final m=mondayOf(DateTime.now());final week=List.generate(7,(i)=>m.add(Duration(days:i)));final totalDue=habits.fold<int>(0,(s,h)=>s+week.where((d)=>due(h,d)).length);final totalDone=habits.fold<int>(0,(s,h)=>s+week.where((d)=>due(h,d)&&done(h,d)).length);return ListView(padding:EdgeInsets.zero,children:[header('INSIGHTS','Your progress','Weekly consistency, trends and achievements.'),card(Column(crossAxisAlignment:CrossAxisAlignment.start,children:[const Text('WEEKLY COMPLETION',style:TextStyle(color:lime,fontWeight:FontWeight.w900)),const SizedBox(height:12),Text('${totalDue==0?0:(totalDone/totalDue*100).round()}%',style:const TextStyle(fontSize:38,fontWeight:FontWeight.w900)),bar(totalDue==0?0:totalDone/totalDue),const SizedBox(height:7),Text('$totalDone of $totalDue scheduled habit check-ins',style:const TextStyle(color:muted))])),...habits.map((h)=>card(Column(crossAxisAlignment:CrossAxisAlignment.start,children:[Row(children:[Expanded(child:Text(h.title,style:const TextStyle(fontWeight:FontWeight.w800))),Text('${(rate(h)*100).round()}%',style:const TextStyle(color:lime,fontWeight:FontWeight.w800))]),const SizedBox(height:8),bar(rate(h)),const SizedBox(height:8),Row(children:week.map((d)=>Expanded(child:Center(child:Container(width:24,height:24,decoration:BoxDecoration(shape:BoxShape.circle,color:done(h,d)?lime:due(h,d)?Colors.white12:Colors.transparent),child:done(h,d)?const Icon(Icons.check,size:15,color:ink):null)))).toList())]))),card(Column(crossAxisAlignment:CrossAxisAlignment.start,children:[const Text('ACHIEVEMENTS',style:TextStyle(color:lime,fontWeight:FontWeight.w900)),const SizedBox(height:10),achievement('First steps','Complete any habit',habits.any((h)=>h.done.values.any((v)=>v))),achievement('Consistency starter','Earn 100 XP',xp>=100),achievement('Habit builder','Earn 500 XP',xp>=500),achievement('Focus learner','Complete 60 focus minutes',focusMinutes>=60)])),const SizedBox(height:20)]);}
+ Widget achievement(String title,String subtitle,bool earned)=>ListTile(contentPadding:EdgeInsets.zero,leading:Icon(earned?Icons.verified_rounded:Icons.lock_outline,color:earned?lime:muted),title:Text(title,style:const TextStyle(fontWeight:FontWeight.w700)),subtitle:Text(subtitle,style:const TextStyle(color:muted)),trailing:Text(earned?'UNLOCKED':'LOCKED',style:TextStyle(fontSize:9,color:earned?lime:muted,fontWeight:FontWeight.w900)));}
+ Widget workouts(){const plans=[('Monday','Walk + strength','20–30 min walk; chair squats, wall push-ups, glute bridges and plank.'),('Tuesday','Walk + mobility','20–30 min walk; gentle stretch 5–10 min.'),('Wednesday','Strength day','Repeat beginner strength circuit, with rests between sets.'),('Thursday','Active recovery','Easy walk and gentle mobility.'),('Friday','Strength day','Strength circuit if recovered; do not train through pain.'),('Saturday','Enjoyable movement','Walk, cycle, or play a sport at a comfortable pace.'),('Sunday','Recovery','Rest or easy movement; review weekly progress.')];return ListView(padding:EdgeInsets.zero,children:[header('MOVEMENT PLAN','Workout planner','Build gradually. Rest when needed; stop if you feel unwell.'),...plans.map((p)=>card(Column(crossAxisAlignment:CrossAxisAlignment.start,children:[Text(p.$1.toUpperCase(),style:const TextStyle(color:lime,fontWeight:FontWeight.w900,letterSpacing:1.2)),const SizedBox(height:6),Text(p.$2,style:const TextStyle(fontSize:17,fontWeight:FontWeight.w800)),const SizedBox(height:7),Text(p.$3,style:const TextStyle(color:muted,height:1.5)),const SizedBox(height:8),OutlinedButton.icon(onPressed:()=>startFocus(10),icon:const Icon(Icons.timer),label:const Text('Start 10-min workout timer'))]))),card(const Text('Beginner circuit: 2 sets of 8–10 chair squats, 8–10 wall push-ups, 10 glute bridges, and 10–20 seconds plank. Rest between sets. Long-term adult goal: 150 minutes of moderate activity weekly plus strength work at least twice a week.',style:TextStyle(color:Colors.white70,height:1.5))),const SizedBox(height:20)]);}
+ Widget health(){final bmi=weight/(1.6764*1.6764);return ListView(padding:EdgeInsets.zero,children:[header('HEALTH HUB','Your body, your trends','Track hydration, sleep, weight and waist over time.'),card(Column(crossAxisAlignment:CrossAxisAlignment.start,children:[const Text('WATER TRACKER',style:TextStyle(color:lime,fontWeight:FontWeight.w900)),const SizedBox(height:10),Text('$water ml logged',style:const TextStyle(fontSize:26,fontWeight:FontWeight.w900)),bar(water/2000),const Text('Illustrative 2,000 ml reference goal; adjust for heat, activity and clinician advice.',style:TextStyle(color:muted,fontSize:11)),Wrap(spacing:8,children:[FilledButton(onPressed:()=>setState(()=>water+=250),child:const Text('+250 ml')),OutlinedButton(onPressed:()=>setState(()=>water=(water-250).clamp(0,10000)),child:const Text('-250 ml')),TextButton(onPressed:()=>setState(()=>water=0),child:const Text('Reset day'))]),FilledButton(onPressed:save,child:const Text('Save water log'))])),card(Column(crossAxisAlignment:CrossAxisAlignment.start,children:[const Text('SLEEP TRACKER',style:TextStyle(color:lime,fontWeight:FontWeight.w900)),const SizedBox(height:8),Text('$sleepHours hours',style:const TextStyle(fontSize:28,fontWeight:FontWeight.w900)),Slider(value:sleepHours.toDouble(),min:0,max:14,divisions:14,label:'$sleepHours hours',onChanged:(v)=>setState(()=>sleepHours=v.round()),onChangeEnd:(_)=>save()),TextField(controller:TextEditingController(text:sleepNote),onChanged:(v)=>sleepNote=v,decoration:const InputDecoration(labelText:'Night waking / sleep note',hintText:'Optional note')),const SizedBox(height:8),FilledButton(onPressed:save,child:const Text('Save sleep'))])),card(Column(crossAxisAlignment:CrossAxisAlignment.start,children:[const Text('BODY PROGRESS',style:TextStyle(color:lime,fontWeight:FontWeight.w900)),const SizedBox(height:8),Text('BMI ${bmi.toStringAsFixed(1)}',style:const TextStyle(fontSize:28,fontWeight:FontWeight.w900)),const Text('Using height 167.64 cm • adult BMI is a screening measure, not a diagnosis.',style:TextStyle(color:muted,fontSize:11)),const SizedBox(height:10),Text('Weight: ${weight.toStringAsFixed(1)} kg'),Slider(value:weight.clamp(35,180),min:35,max:180,divisions:290,onChanged:(v)=>setState(()=>weight=double.parse(v.toStringAsFixed(1)))),Text('Waist: ${waist.toStringAsFixed(1)} inches'),Slider(value:waist.clamp(20,70),min:20,max:70,divisions:100,onChanged:(v)=>setState(()=>waist=double.parse(v.toStringAsFixed(1)))),FilledButton(onPressed:()async{bodyLog.add({'date':keyDate(DateTime.now()),'weight':weight,'waist':waist,'bmi':double.parse(bmi.toStringAsFixed(1))});await save();if(mounted)ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content:Text('Body measurement saved')));},child:const Text('Save measurement')),const SizedBox(height:10),...bodyLog.reversed.take(5).map((e)=>Text('${e['date']}  •  ${e['weight']} kg  •  ${e['waist']} in',style:const TextStyle(color:muted,fontSize:12)))])),card(Column(crossAxisAlignment:CrossAxisAlignment.start,children:[const Text('MOOD & ENERGY',style:TextStyle(color:lime,fontWeight:FontWeight.w900)),const SizedBox(height:12),Text('Mood: ${['','Low','Okay','Good','Great'][mood]}'),Wrap(spacing:5,children:List.generate(4,(i)=>ChoiceChip(label:Text(['Low','Okay','Good','Great'][i]),selected:mood==i+1,onSelected:(_)=>setState(()=>mood=i+1)))),const SizedBox(height:8),Text('Energy: ${['','Low','Okay','Good','High'][energy]}'),Wrap(spacing:5,children:List.generate(4,(i)=>ChoiceChip(label:Text(['Low','Okay','Good','High'][i]),selected:energy==i+1,onSelected:(_)=>setState(()=>energy=i+1)))),FilledButton(onPressed:save,child:const Text('Save mood & energy'))])),card(Column(crossAxisAlignment:CrossAxisAlignment.start,children:[const Text('SMART REMINDERS',style:TextStyle(color:lime,fontWeight:FontWeight.w900)),const Text('Set in-app reminder times for your routine. OS notifications need notification permission and are not sent by this basic build.',style:TextStyle(color:muted,fontSize:12,height:1.5)),...['Water','Movement','Bedtime','Study'].map((name)=>ListTile(contentPadding:EdgeInsets.zero,title:Text(name),subtitle:Text(reminders[name]??'No time set',style:const TextStyle(color:muted)),trailing:IconButton(icon:const Icon(Icons.alarm_add,color:lime),onPressed:()async{final t=await showTimePicker(context:context,initialTime:TimeOfDay.now());if(t!=null)setState(()=>reminders[name]=t.format(context));await save();}))),TextButton(onPressed:()async{setState(()=>reminders.clear());await save();},child:const Text('Clear reminder times'))])),const SizedBox(height:20)]);}
+ void startFocus(int minutes){timer?.cancel();setState(()=>secondsLeft=minutes*60);startTimer();}
+ void startTimer(){timer?.cancel();setState(()=>timerRunning=true);timer=Timer.periodic(const Duration(seconds:1),(t){if(secondsLeft<=1){t.cancel();setState(()=>{secondsLeft=0,timerRunning=false,focusMinutes+=25,xp+=20});save();}else{setState(()=>secondsLeft--);}});}
+ Widget focusAndGuide(){return ListView(padding:EdgeInsets.zero,children:[header('FOCUS MODE','Study & focus timer','Pomodoro sessions, custom focus and practical habit guidance.'),card(Column(children:[const Icon(Icons.hourglass_bottom_rounded,color:lime,size:48),const SizedBox(height:8),Text('${(secondsLeft~/60).toString().padLeft(2,'0')}:${(secondsLeft%60).toString().padLeft(2,'0')}',style:const TextStyle(fontSize:48,fontWeight:FontWeight.w900)),Text('$focusMinutes focus minutes completed',style:const TextStyle(color:muted)),const SizedBox(height:12),Wrap(alignment:WrapAlignment.center,spacing:8,children:[OutlinedButton(onPressed:()=>startFocus(25),child:const Text('25 min')),OutlinedButton(onPressed:()=>startFocus(50),child:const Text('50 min')),OutlinedButton(onPressed:()=>startFocus(5),child:const Text('5 min break'))]),const SizedBox(height:8),FilledButton(onPressed:timerRunning?()=>setState(()=>{timer?.cancel(),timerRunning=false}):startTimer,child:Text(timerRunning?'Pause timer':'Start timer')),TextButton(onPressed:()=>setState(()=>{timer?.cancel(),timerRunning=false,secondsLeft=25*60}),child:const Text('Reset timer'))])),card(Column(crossAxisAlignment:CrossAxisAlignment.start,children:[const Text('HABIT PLAYBOOK',style:TextStyle(color:lime,fontWeight:FontWeight.w900)),const SizedBox(height:10),...['DO: walk most days and break up long sitting periods.','DO: eat regular balanced meals with protein, vegetables and fruit.','DO: keep a consistent sleep schedule and track progress weekly.','AVOID: crash diets, skipping meals, or trying to spot-reduce belly/face fat.','AVOID: pushing through chest pain, faintness or unusual breathlessness.','Your BMI is within the usual adult healthy range; focus on strength, fitness and consistency rather than rapid weight loss.'].map((s)=>Padding(padding:const EdgeInsets.only(bottom:10),child(Text('• $s',style:const TextStyle(color:Colors.white70,height:1.45)))))])),card(Column(crossAxisAlignment:CrossAxisAlignment.start,children:[const Text('DATA & STREAKS',style:TextStyle(color:lime,fontWeight:FontWeight.w900)),const SizedBox(height:8),Text('XP: $xp • Level ${xp~/100+1} • Long-term habit streaks can be expanded next.',style:const TextStyle(color:muted)),FilledButton.icon(onPressed:()async{final p=await SharedPreferences.getInstance();await p.setString('habitflow_export',jsonEncode({'habits':habits.map((h)=>h.toJson()).toList(),'xp':xp,'water':water,'weight':weight,'waist':waist,'bodyLog':bodyLog,'focusMinutes':focusMinutes}));if(mounted)ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content:Text('Backup snapshot saved in app storage')));},icon:const Icon(Icons.backup_outlined),label:const Text('Create local backup snapshot'))])),const SizedBox(height:20)]);}
+ Future<void> addHabit()async{final title=TextEditingController(),note=TextEditingController();String category='Daily';final selected=<int>{1,2,3,4,5,6,7};final result=await showModalBottomSheet<bool>(context:context,isScrollControlled:true,backgroundColor:panel,builder:(ctx)=>StatefulBuilder(builder:(ctx,modalSet)=>Padding(padding:EdgeInsets.fromLTRB(20,20,20,MediaQuery.of(ctx).viewInsets.bottom+20),child:SingleChildScrollView(child:Column(mainAxisSize:MainAxisSize.min,children:[TextField(controller:title,decoration:const InputDecoration(labelText:'Habit name')),TextField(controller:note,decoration:const InputDecoration(labelText:'Reminder / description')),DropdownButtonFormField<String>(value:category,items:const ['Daily','Fitness','Health','Nutrition','Recovery','Study'].map((c)=>DropdownMenuItem(value:c,child:Text(c))).toList(),onChanged:(v)=>modalSet(()=>category=v??'Daily')),Wrap(spacing:5,children:List.generate(7,(i)=>FilterChip(label:Text(daysName[i]),selected:selected.contains(i+1),onSelected:(v)=>modalSet(()=>v?selected.add(i+1):selected.remove(i+1))))),FilledButton(onPressed:()=>Navigator.pop(ctx,true),child:const Text('Save habit'))])))));if(result==true&&title.text.trim().isNotEmpty&&selected.isNotEmpty){setState(()=>habits.add(Habit(id:DateTime.now().microsecondsSinceEpoch.toString(),title:title.text.trim(),category:category,note:note.text.trim(),days:selected.toList()..sort())));await save();}title.dispose();note.dispose();}
 }
