@@ -1,4 +1,4 @@
-name: Habit_tracker
+name: habit_tracker
 description: Advanced Dark Green Glassmorphic Habit Tracker in Flutter
 publish_to: 'none'
 version: 1.0.0+1
@@ -19,4 +19,3 @@ dev_dependencies:
 
 flutter:
   uses-material-design: true
-  
