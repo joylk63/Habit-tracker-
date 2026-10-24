@@ -16,7 +16,7 @@ class HabitFlowApp extends StatelessWidget {
 }
 
 class Habit {
-  Habit({required this.id,required this.title,required this.category,required this.note,required this.days,this.done=const {}});
+  Habit({required this.id,required this.title,required this.category,required this.note,required this.days,Map<String,bool>? done}) : done = done ?? <String,bool>{};
   String id,title,category,note; List<int> days; Map<String,bool> done;
   Map<String,dynamic> toJson()=>{'id':id,'title':title,'category':category,'note':note,'days':days,'done':done};
   factory Habit.fromJson(Map<String,dynamic> j)=>Habit(id:j['id'],title:j['title'],category:j['category']??'Daily',note:j['note']??'',days:List<int>.from(j['days']??[1,2,3,4,5,6,7]),done:Map<String,bool>.from(j['done']??{}));
